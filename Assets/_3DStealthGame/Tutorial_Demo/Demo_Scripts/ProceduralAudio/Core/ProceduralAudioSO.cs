@@ -1,0 +1,43 @@
+using UnityEngine;
+
+[CreateAssetMenu(fileName = "NewProceduralAudioPreset", menuName = "Audio/Procedural Audio Preset")]
+public class ProceduralAudioSO : ScriptableObject
+{
+    [Header("Forma de Onda y Volumen")]
+    public WaveformType waveform = WaveformType.Sine;
+    [Range(0f, 1f)] public float amplitude = 0.3f;
+    public float baseFrequency = 440f;
+
+    [Header("Síntesis Aditiva (10 Armónicos)")]
+    public bool useAdditive = false;
+    [Range(0f, 1f)] public float[] harmonicLevels = new float[10] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f };
+
+    [Header("Envolvente ADSR (en ms)")]
+    public bool useADSR = true;
+    public float attack = 10f;
+    public float decay = 150f;
+    [Range(0f, 1f)] public float sustainLevel = 0.7f;
+    public float sustainTime = 200f;
+    public float release = 100f;
+
+    [Header("Pitch Sweep (boing / caída)")]
+    [Tooltip("Multiplicador de frecuencia al inicio. 1 = sin sweep. >1 cae hacia la nota, <1 sube hacia la nota")]
+    public float pitchSweepMultiplier = 1f;
+    [Tooltip("Duración del sweep en ms")]
+    public float pitchSweepTime = 0f;
+
+    [Header("LFO / Vibrato (FM)")]
+    public bool useLFO = false;
+    [Range(0f, 10f)] public float lfoRate = 5f;   // FV: Fm en Hz
+    public float lfoDepthHz = 10f;                 // Vamp: ΔF en Hz
+    public float LFOIndex => lfoRate > 0.0001f ? lfoDepthHz / lfoRate : 0f; // I = ΔF / Fm
+}
+
+public enum WaveformType
+{
+    Sine,
+    Square,
+    Triangle,
+    Sawtooth,
+    Additive
+}
