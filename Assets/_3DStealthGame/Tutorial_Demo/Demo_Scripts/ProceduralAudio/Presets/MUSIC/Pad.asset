@@ -12,27 +12,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e0992ead2e93f2a4b870d0a867c47592, type: 3}
   m_Name: Pad
   m_EditorClassIdentifier: 
-  waveform: 0
+  waveform: 4
   amplitude: 0.3
   baseFrequency: 440
-  useAdditive: 0
+  useAdditive: 1
   harmonicLevels:
   - 1
-  - 0
-  - 0
-  - 0
-  - 0
+  - 0.432
+  - 0.257
+  - 0.142
+  - 0.022
   - 0
   - 0
   - 0
   - 0
   - 0
   useADSR: 1
-  attack: 10
-  decay: 150
-  sustainLevel: 0.7
-  sustainTime: 200
-  release: 100
+  attack: 500
+  decay: 300
+  sustainLevel: 0.1
+  sustainTime: 60
+  release: 800
   pitchSweepMultiplier: 1
   pitchSweepTime: 0
   useLFO: 0

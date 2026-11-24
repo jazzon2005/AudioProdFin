@@ -12,29 +12,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e0992ead2e93f2a4b870d0a867c47592, type: 3}
   m_Name: KeyCollect
   m_EditorClassIdentifier: 
-  waveform: 0
-  amplitude: 0.3
-  baseFrequency: 440
-  useAdditive: 0
+  waveform: 4
+  amplitude: 0.32
+  baseFrequency: 880
+  useAdditive: 1
   harmonicLevels:
   - 1
-  - 0
-  - 0
-  - 0
-  - 0
-  - 0
+  - 0.673
+  - 0.317
+  - 0.125
+  - 0.048
+  - 0.029
   - 0
   - 0
   - 0
   - 0
   useADSR: 1
-  attack: 10
-  decay: 150
-  sustainLevel: 0.7
-  sustainTime: 200
-  release: 100
-  pitchSweepMultiplier: 1
-  pitchSweepTime: 0
+  attack: 1
+  decay: 90
+  sustainLevel: 0.418
+  sustainTime: 90
+  release: 250
+  pitchSweepMultiplier: 0.8
+  pitchSweepTime: 40
   useLFO: 0
-  lfoRate: 5
+  lfoRate: 6
   lfoDepthHz: 10

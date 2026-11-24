@@ -21,7 +21,8 @@ public static class Notes
     public static float Hz(string note, int octave) => Hz(note + octave);
 }
 
-/// Música generativa por capas en Re menor: bajo, pad, marimba y percusión.
+/// Música generativa de suspenso por capas (bajo pizzicato, pad de órgano, xilófono y percusión de latido),
+/// con un tema distinto para cada ambiente del juego.
 public class ProceduralMusicSystem : MonoBehaviour
 {
     public static ProceduralMusicSystem Instance { get; private set; }
@@ -62,34 +63,63 @@ public class ProceduralMusicSystem : MonoBehaviour
         }
     }
 
+    // ---------- Temas por ambiente ----------
+    struct Theme
+    {
+        public string name;
+        public int tonic;         // MIDI de la tónica del bajo (38 = D2)
+        public float bpm;
+        public int[] chords;      // raíz de cada uno de los 4 compases, en semitonos sobre la tónica
+        public string quality;    // 'm' menor, 'M' mayor, una letra por compás
+        public bool minor;        // escala de blues menor (true) o pentatónica mayor (false)
+        public int pattern;       // índice en BassPatterns
+
+        public Theme(string n, int t, float b, int[] c, string q, bool m, int p)
+        { name = n; tonic = t; bpm = b; chords = c; quality = q; minor = m; pattern = p; }
+    }
+
+    static readonly Theme[] Themes =
+    {
+        new Theme("Mansión",      38,  84f, new[]{0,8,5,7}, "mMmM", true, 3), // Re menor, calma tensa
+        new Theme("Sótano",       33,  92f, new[]{0,1,0,6}, "mMmM", true, 3), // La menor, segunda menor y tritono
+        new Theme("Cementerio",   40,  88f, new[]{0,8,6,7}, "mMMM", true, 0), // Mi menor
+        new Theme("Persecución",  38, 132f, new[]{0,1,0,6}, "mMmM", true, 2), // Re menor, corcheas constantes
+        new Theme("Jefe final",   36, 112f, new[]{0,3,8,6}, "mMMm", true, 1), // Do menor
+    };
+
+    // 16 pasos de semicorchea por compás; 'x' = golpe de bajo
+    static readonly string[] BassPatterns =
+    {
+        "x...x...x..x..x.",   // 0: pulso disperso
+        "x..x..x.x..x..x.",   // 1: rebotón
+        "x.x.x.x.x.x.x.x.",   // 2: urgencia (persecución)
+        "x.x...x.x.x...x."    // 3: sigiloso, notas cortas a contratiempo
+    };
+
+    static readonly int[] MinorBlues = { 0, 3, 5, 6, 7, 10 };   // la nota "6" es el tritono: aporta el susto
+    static readonly int[] MajorPent = { 0, 2, 4, 7, 9 };
+
     [Header("Capas (asignar un ProceduralAudioSO a cada una)")]
     public Layer bass = new Layer { voices = 2 };
     public Layer pad = new Layer { voices = 3 };
     public Layer lead = new Layer { voices = 3 };
     public Layer perc = new Layer { voices = 2 };
 
+    [Header("Percusión de ruido (velocidad del ruido en Hz)")]
+    public float kickHz = 55f;     // latido
+    public float snareHz = 1200f;  // rasguño
+    public float hatHz = 5000f;    // grillos
+
     [Header("Control")]
     public bool playOnStart = true;
-    [Range(40f, 160f)] public float bpm = 96f;
+    [Range(1, 5)] public int level = 1;
     [Range(0f, 1f)] public float musicVolume = 0.5f;
-    [Range(0f, 1f)] public float progress = 0f; // 0 = inicio de nivel, 1 = cerca de la solución
+    [Tooltip("0 = calma, 1 = peligro máximo (te vieron, persecución)")]
+    [Range(0f, 1f)] public float progress = 0f;
     public int seed = 7;
 
-    // Progresión Dm | Bb | C | Am (todo dentro de Re menor)
-    static readonly string[] RootNames = { "D2", "Bb1", "C2", "A1" };
-    static readonly string[][] PadChords =
-    {
-        new[] { "D3", "F3", "A3" },
-        new[] { "Bb2", "D3", "F3" },
-        new[] { "C3", "E3", "G3" },
-        new[] { "A2", "C3", "E3" }
-    };
-    // Pentatónica menor de Re en dos octavas (registro de marimba)
-    static readonly string[] LeadScale = { "D4", "F4", "G4", "A4", "C5", "D5", "F5", "G5", "A5", "C6" };
-    // Patrón de bajo rebotón (16 pasos de semicorchea)
-    static readonly bool[] BassHit =
-        { true,false,false,true, false,false,true,false, true,false,false,true, false,false,true,false };
-
+    // Estado del tema activo
+    Theme theme;
     float[] rootHz;
     float[][] padHz;
     float[] leadHz;
@@ -99,7 +129,10 @@ public class ProceduralMusicSystem : MonoBehaviour
     int stepCount;
     int leadIdx = 3;
     bool running;
-    bool inCadence;
+
+    // Ducking: baja la música unos instantes cuando suena un SFX importante
+    float duck = 1f;
+    float duckRecover = 0.5f;
 
     bool musicEnabled = true;
     public bool MusicEnabled
@@ -116,27 +149,24 @@ public class ProceduralMusicSystem : MonoBehaviour
     public float MusicVolume { get => musicVolume; set => musicVolume = Mathf.Clamp01(value); }
     public void SetProgress(float p) { progress = Mathf.Clamp01(p); }
 
+    // Compatibilidad: lee el tempo del tema o lo reemplaza a mano. SetLevel() lo restablece.
+    float bpmOverride = -1f;
+    public float bpm
+    {
+        get => bpmOverride > 0f ? bpmOverride : (theme.bpm > 0f ? theme.bpm : Themes[0].bpm);
+        set => bpmOverride = value;
+    }
+
     void Awake()
     {
         if (Instance == null) Instance = this; else { Destroy(gameObject); return; }
-
-        rootHz = new float[RootNames.Length];
-        for (int i = 0; i < RootNames.Length; i++) rootHz[i] = Notes.Hz(RootNames[i]);
-
-        padHz = new float[PadChords.Length][];
-        for (int c = 0; c < PadChords.Length; c++)
-        {
-            padHz[c] = new float[PadChords[c].Length];
-            for (int n = 0; n < PadChords[c].Length; n++) padHz[c][n] = Notes.Hz(PadChords[c][n]);
-        }
-
-        leadHz = new float[LeadScale.Length];
-        for (int i = 0; i < LeadScale.Length; i++) leadHz[i] = Notes.Hz(LeadScale[i]);
 
         bass.Init(transform, "Bass");
         pad.Init(transform, "Pad");
         lead.Init(transform, "Lead");
         perc.Init(transform, "Perc");
+
+        BuildTheme(level);
     }
 
     void Start()
@@ -144,12 +174,47 @@ public class ProceduralMusicSystem : MonoBehaviour
         if (playOnStart && musicEnabled) StartMusic();
     }
 
+    /// <summary>Cambia al tema del ambiente (1 a 5) y reinicia la música con una breve pausa.</summary>
+    public void SetLevel(int newLevel)
+    {
+        level = Mathf.Clamp(newLevel, 1, Themes.Length);
+        progress = 0f;
+        bpmOverride = -1f;
+        BuildTheme(level);
+        StopMusic();
+        if (musicEnabled) StartMusic();
+    }
+
+    void BuildTheme(int lvl)
+    {
+        theme = Themes[Mathf.Clamp(lvl, 1, Themes.Length) - 1];
+
+        rootHz = new float[4];
+        padHz = new float[4][];
+        for (int c = 0; c < 4; c++)
+        {
+            int o = theme.chords[c] > 6 ? theme.chords[c] - 12 : theme.chords[c]; // mantiene el bajo grave
+            int b = theme.tonic + o;
+            rootHz[c] = Notes.Hz(b);
+            int third = theme.quality[c] == 'm' ? 3 : 4;
+            int r = b + 12;
+            padHz[c] = new[] { Notes.Hz(r), Notes.Hz(r + third), Notes.Hz(r + 7) };
+        }
+
+        int[] scale = theme.minor ? MinorBlues : MajorPent;
+        leadHz = new float[scale.Length * 2];
+        for (int i = 0; i < leadHz.Length; i++)
+            leadHz[i] = Notes.Hz(theme.tonic + 24 + 12 * (i / scale.Length) + scale[i % scale.Length]);
+        leadIdx = Mathf.Min(3, leadHz.Length - 1);
+    }
+
     public void StartMusic()
     {
         if (!musicEnabled) return;
-        rng = new System.Random(seed);
+        rng = new System.Random(seed + level);   // cada ambiente tiene su melodía, repetible
         stepCount = 0;
-        nextStepTime = AudioSettings.dspTime + 0.1;
+        leadIdx = Mathf.Min(3, leadHz.Length - 1);
+        nextStepTime = AudioSettings.dspTime + 0.25; // pausa breve: transición
         running = true;
     }
 
@@ -159,11 +224,22 @@ public class ProceduralMusicSystem : MonoBehaviour
         bass.StopAll(); pad.StopAll(); lead.StopAll(); perc.StopAll();
     }
 
+    /// <summary>Baja la música (amount 0 a 1) y la recupera en 'seconds'. Úsalo con sustos o eventos grandes.</summary>
+    public void Duck(float amount, float seconds)
+    {
+        duck = Mathf.Min(duck, 1f - Mathf.Clamp01(amount));
+        duckRecover = Mathf.Max(0.05f, seconds);
+    }
+
     void Update()
     {
+        duck = Mathf.MoveTowards(duck, 1f, Time.unscaledDeltaTime / duckRecover);
+
         if (!running) return;
 
-        double stepDur = 60.0 / bpm / 4.0;
+        // El peligro acelera el tempo (hasta +12 %)
+        float bpmNow = bpm * Mathf.Lerp(1f, 1.12f, progress);
+        double stepDur = 60.0 / bpmNow / 4.0;
         double now = AudioSettings.dspTime;
         int guard = 0;
         while (now >= nextStepTime && guard++ < 4)
@@ -177,55 +253,71 @@ public class ProceduralMusicSystem : MonoBehaviour
 
     void Step(int count, float stepDur)
     {
-        int bar = (count / 16) % rootHz.Length;
+        int bar = (count / 16) % 4;
         int s = count % 16;
-        float m = musicVolume;
+        float m = musicVolume * duck;
 
-        // PAD: acorde largo al inicio de cada compás
+        // PAD (órgano): acorde largo al inicio de cada compás
         if (s == 0)
         {
             float barSec = stepDur * 16f;
             foreach (float hz in padHz[bar]) pad.Play(hz, barSec * 0.9f, m);
         }
 
-        // BAJO: rebotón, con octava y quinta como en los juegos de plataformas
-        if (BassHit[s])
+        // BAJO (pizzicato): patrón del tema, con octava y quinta
+        if (BassPatterns[theme.pattern][s] == 'x')
         {
-            float mul = (s == 6 || s == 14) ? 2f : (s == 3 || s == 11) ? 1.5f : 1f;
+            float mul = (s % 8 == 6) ? 2f : (s % 8 == 3) ? 1.5f : 1f;
             bass.Play(rootHz[bar] * mul, stepDur * 1.5f, m);
         }
 
-        // MARIMBA: caminata aleatoria por la pentatónica, más densa con el progreso
-        if (!inCadence && s % 2 == 0 && rng.NextDouble() < Mathf.Lerp(0.30f, 0.70f, progress))
+        // XILÓFONO: caminata aleatoria por la escala de blues; esparcido en calma, denso con peligro
+        float baseProb = Mathf.Lerp(0.15f, 0.35f, (level - 1) / (float)(Themes.Length - 1));
+        if (s % 2 == 0 && rng.NextDouble() < Mathf.Lerp(baseProb, 0.70f, progress))
         {
             leadIdx = Mathf.Clamp(leadIdx + rng.Next(-2, 3), 0, leadHz.Length - 1);
-            float vel = (s % 4 == 0) ? 1f : 0.75f; // acento en tiempos fuertes
+            float vel = (s % 4 == 0) ? 1f : 0.75f;
             lead.Play(leadHz[leadIdx], stepDur * 2f, m, vel);
         }
 
-        // PERCUSIÓN: bongó grave siempre; bongó agudo y tick según progreso
-        if (s == 4 || s == 12) perc.Play(180f, stepDur, m);
-        if (progress >= 0.25f && (s == 7 || s == 10 || s == 15) && rng.NextDouble() < 0.7) perc.Play(330f, stepDur, m, 0.8f);
-        if (progress >= 0.6f && s % 2 == 1) perc.Play(900f, stepDur * 0.5f, m, 0.5f);
-    }
-
-    /// <summary>Cierre musical al ganar el nivel: arpegio ascendente Dm.</summary>
-    public void PlayCadence()
-    {
-        if (!running) return;
-        StartCoroutine(CadenceRoutine());
-    }
-
-    IEnumerator CadenceRoutine()
-    {
-        inCadence = true;
-        string[] arp = { "D4", "F4", "A4", "D5", "F5", "A5" };
-        foreach (string n in arp)
+        // PERCUSIÓN: latido (lub-dub) siempre; con peligro el latido se duplica
+        if (s == 0) perc.Play(kickHz, stepDur, m);
+        if (s == 3) perc.Play(kickHz, stepDur, m, 0.7f);
+        if (progress >= 0.5f)
         {
-            lead.Play(Notes.Hz(n), 0.5f, musicVolume);
-            yield return new WaitForSeconds(0.11f);
+            if (s == 8) perc.Play(kickHz, stepDur, m);
+            if (s == 11) perc.Play(kickHz, stepDur, m, 0.7f);
         }
-        yield return new WaitForSeconds(0.6f);
-        inCadence = false;
+        // rasguños a contratiempo desde el segundo ambiente
+        if (level >= 2 && (s == 6 || s == 14)) perc.Play(snareHz, stepDur, m, 0.5f);
+        // grillos: aparecen con el peligro
+        if (progress > 0.1f && s % 2 == 1 && rng.NextDouble() < Mathf.InverseLerp(0.1f, 0.6f, progress))
+            perc.Play(hatHz, stepDur * 0.5f, m, 0.4f);
+    }
+
+    /// <summary>Compatibilidad con la versión anterior: equivale a PlayWinStinger.</summary>
+    public void PlayCadence() { PlayWinStinger(); }
+
+    /// <summary>Victoria: para la música y resuelve en mayor (alivio tras tanto menor).</summary>
+    public void PlayWinStinger()
+    {
+        StopMusic();
+        StartCoroutine(Stinger(new[] { 0, 4, 7, 12, 16, 19 }, theme.tonic + 24, 0.09f));
+    }
+
+    /// <summary>Derrota: para la música y baja por semitonos, tipo trombón triste.</summary>
+    public void PlayLoseStinger()
+    {
+        StopMusic();
+        StartCoroutine(Stinger(new[] { 12, 11, 10, 8 }, theme.tonic + 24, 0.2f));
+    }
+
+    IEnumerator Stinger(int[] semis, int rootMidi, float gap)
+    {
+        foreach (int semi in semis)
+        {
+            lead.Play(Notes.Hz(rootMidi + semi), gap * 3f, musicVolume);
+            yield return new WaitForSeconds(gap);
+        }
     }
 }

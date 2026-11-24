@@ -203,8 +203,11 @@ MonoBehaviour:
     preset: {fileID: 11400000, guid: 6addd3412142cbb41a6393a913d15429, type: 2}
     voices: 2
     volume: 1
+  kickHz: 55
+  snareHz: 900
+  hatHz: 3500
   playOnStart: 1
-  bpm: 96
+  level: 1
   musicVolume: 0.5
   progress: 0
   seed: 7

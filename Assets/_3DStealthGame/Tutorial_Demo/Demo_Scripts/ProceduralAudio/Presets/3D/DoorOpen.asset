@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e0992ead2e93f2a4b870d0a867c47592, type: 3}
   m_Name: DoorOpen
   m_EditorClassIdentifier: 
-  waveform: 0
-  amplitude: 0.3
-  baseFrequency: 440
+  waveform: 4
+  amplitude: 0.311
+  baseFrequency: 82
   useAdditive: 0
   harmonicLevels:
   - 1
@@ -28,13 +28,13 @@ MonoBehaviour:
   - 0
   - 0
   useADSR: 1
-  attack: 10
-  decay: 150
-  sustainLevel: 0.7
-  sustainTime: 200
-  release: 100
-  pitchSweepMultiplier: 1
-  pitchSweepTime: 0
+  attack: 60
+  decay: 400
+  sustainLevel: 0.445
+  sustainTime: 300
+  release: 300
+  pitchSweepMultiplier: 0.6
+  pitchSweepTime: 700
   useLFO: 0
-  lfoRate: 5
-  lfoDepthHz: 10
+  lfoRate: 9
+  lfoDepthHz: 20

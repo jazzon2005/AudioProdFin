@@ -13,28 +13,28 @@ MonoBehaviour:
   m_Name: Wind
   m_EditorClassIdentifier: 
   waveform: 0
-  amplitude: 0.3
-  baseFrequency: 440
+  amplitude: 0.175
+  baseFrequency: 450
   useAdditive: 0
   harmonicLevels:
   - 1
-  - 0
-  - 0
-  - 0
-  - 0
-  - 0
+  - 0.596
+  - 0.308
+  - 0.115
+  - 0.048
+  - 0.019
   - 0
   - 0
   - 0
   - 0
   useADSR: 1
-  attack: 10
-  decay: 150
-  sustainLevel: 0.7
-  sustainTime: 200
-  release: 100
-  pitchSweepMultiplier: 1
-  pitchSweepTime: 0
-  useLFO: 0
-  lfoRate: 5
-  lfoDepthHz: 10
+  attack: 1500
+  decay: 1000
+  sustainLevel: 0.5
+  sustainTime: 2500
+  release: 2000
+  pitchSweepMultiplier: 0.8
+  pitchSweepTime: 2500
+  useLFO: 1
+  lfoRate: 0.8
+  lfoDepthHz: 50
